@@ -72,6 +72,14 @@ jobs:
           out-file-path: "deps"
           extract: true
 
+# by MaaNewMoonAccompanying
+
+      - name: Setup Embed Python
+        shell: powershell
+        run: |
+          ./ci/setup_embed_python.ps1
+
+# end
       - name: Download MFAAvalonia
         if: matrix.os != 'android'
         id: download_mfa
