@@ -16,7 +16,8 @@
 	"task": [
 		{
 			"name": "启动游戏",
-			"entry": "StartGame_Start"
+			"entry": "StartGame_Start",
+			"doc": "**启动游戏**：\n\n自动启动游戏\n\n**注意：null**"
 		},
 		{
 			"name": "地图采集",
@@ -712,7 +713,7 @@
 		"末日之书": {
 			"cases": [
 				{
-					"name": "关闭",
+					"name": "No",
 					"pipeline_override": {
 						"Weekly_LastNight_Start": {
 							"next": [
@@ -722,7 +723,7 @@
 					}
 				},
 				{
-					"name": "开启",
+					"name": "Yes",
 					"pipeline_override": {}
 				}
 			]
@@ -792,6 +793,7 @@
 		}
 	},
 	"name": "MFABD2",
+	"custom_title": "MFABD2|MFA棕色尘埃2(sunyink/MFABD2)| 游戏版本：20251001(Starlight Child)",
 	"url": "https://github.com/sunyink/MFABD2",
 	"version": "v2.0.1"
 }
