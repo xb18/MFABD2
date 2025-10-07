@@ -10,6 +10,7 @@ on:
       - ".github/workflows/install.yml"
       - "assets/**"
       - "**.py"
+      - "resource/**"
   pull_request:
     branches:
       - "**"
@@ -17,6 +18,7 @@ on:
       - ".github/workflows/install.yml"
       - "assets/**"
       - "**.py"
+      - "resource/**"
   workflow_dispatch:
 
 jobs:
@@ -28,41 +30,40 @@ jobs:
           fetch-depth: 0
       - id: set_tag
         run: |
-          # 使用环境变量获取引用信息
           is_tag_push=false
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             is_tag_push=true
           fi
           
           if [ "$is_tag_push" = true ]; then
-            # 从环境变量提取标签名
             tag="${GITHUB_REF#refs/tags/}"
           else
-            # 非标签推送：生成开发版本号
             latest_tag=$(git describe --tags --match "v*" --abbrev=0 2>/dev/null || echo "v0.0.0")
             commit_short=$(git rev-parse --short HEAD)
             date_suffix=$(date +"%y%m%d")
             tag="${latest_tag}-ci.${date_suffix}-${commit_short}"
           fi
           
-          # 设置开发版本标识
           if [ "$is_tag_push" = true ]; then
             is_dev_version=false
           else
             is_dev_version=true
           fi
 
-          # 输出变量
+          # 获取上一个正式版标签
+          prev_tag=$(git describe --tags --match "v*" --abbrev=0 ${{ github.ref }}^ 2>/dev/null || echo "")
+          echo "prev_tag=${prev_tag}" | tee -a $GITHUB_OUTPUT
           echo "tag=$tag" | tee -a $GITHUB_OUTPUT
           echo "is_tag_push=$is_tag_push" | tee -a $GITHUB_OUTPUT
           echo "is_dev_version=$is_dev_version" | tee -a $GITHUB_OUTPUT
     outputs:
       tag: ${{ steps.set_tag.outputs.tag }}
+      prev_tag: ${{ steps.set_tag.outputs.prev_tag }}
       is_tag_push: ${{ steps.set_tag.outputs.is_tag_push }}
       is_dev_version: ${{ steps.set_tag.outputs.is_dev_version }}
 
   install:
-    needs: meta
+    needs: [meta]
     runs-on: macos-latest
     strategy:
       matrix:
@@ -74,6 +75,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+          fetch-depth: 0
 
       - name: Download MaaFramework
         uses: robinraju/release-downloader@v1
@@ -102,6 +104,38 @@ jobs:
           ARCHIVE_FILE_PATH="${{ fromJson(steps.download_mfa.outputs.downloaded_files)[0] }}"
           rm -f "${ARCHIVE_FILE_PATH}"
 
+      # ========== 变更日志生成 ==========
+      - name: Generate Changelog for App
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 使用1000次/小时的GitHub App令牌
+        shell: bash
+        run: |
+          # 安装git-cliff（使用系统包管理器更快速）
+          if command -v apt-get &> /dev/null; then
+            sudo apt-get update && sudo apt-get install -y git-cliff
+          else
+            cargo install git-cliff
+          fi
+          
+          # 生成当前版本的变更日志
+          if [ -n "${{ needs.meta.outputs.prev_tag }}" ]; then
+            echo "生成变更日志从 ${{ needs.meta.outputs.prev_tag }} 到 HEAD"
+            git-cliff --config .github/cliff.toml \
+              --tag "${{ needs.meta.outputs.tag }}" \
+              --unreleased \
+              --include-path '*.py' '*.md' 'assets/*' \
+              --output resource/Changelog.md \
+              ${{ needs.meta.outputs.prev_tag }}..HEAD
+          else
+            echo "生成完整变更日志"
+            git-cliff --config .github/cliff.toml \
+              --tag "${{ needs.meta.outputs.tag }}" \
+              --output resource/Changelog.md
+          fi
+          
+          echo "✅ 应用变更日志已生成"
+      # ====================================
+
       - name: Install
         shell: bash
         run: |
@@ -113,6 +147,11 @@ jobs:
               rsync -av --ignore-existing MFA/ install/
             fi
           fi
+          
+          if [ -f "resource/Changelog.md" ]; then
+            mkdir -p install/resource
+            cp resource/Changelog.md install/resource/
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
@@ -120,30 +159,66 @@ jobs:
           path: "install"
 
   changelog:
-    name: Generate changelog
+    name: Generate changelog for Release
     runs-on: ubuntu-latest
+    needs: meta
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
-      release_body: ${{ steps.git-cliff.outputs.content }}
+      release_body: ${{ steps.generate-changelog.outputs.release_body }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Generate a changelog
-        uses: orhun/git-cliff-action@v4
-        id: git-cliff
-        with:
-          config: .github/cliff.toml
-          args: -vv --latest --strip header
+      # ========== 发布变更日志生成 ==========
+      - name: Generate changelog for Release
+        id: generate-changelog
         env:
-          OUTPUT: CHANGES.md
-          GITHUB_REPO: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 使用1000次/小时的GitHub App令牌
+        shell: bash
+        run: |
+          # 安装git-cliff
+          if command -v apt-get &> /dev/null; then
+            sudo apt-get update && sudo apt-get install -y git-cliff
+          else
+            cargo install git-cliff
+          fi
+          
+          # 生成当前版本的变更日志
+          if [ -n "${{ needs.meta.outputs.prev_tag }}" ]; then
+            git-cliff --config .github/cliff.toml \
+              --tag "${{ needs.meta.outputs.tag }}" \
+              --unreleased \
+              --include-path '*.py' '*.md' 'assets/*' \
+              --output temp_changelog.md \
+              ${{ needs.meta.outputs.prev_tag }}..HEAD
+          else
+            git-cliff --config .github/cliff.toml \
+              --tag "${{ needs.meta.outputs.tag }}" \
+              --output temp_changelog.md
+          fi
+          
+          # 读取文件内容
+          content=$(cat temp_changelog.md)
+          
+          # 设置输出（使用GitHub内置的多行输出支持）
+          delimiter="EOF_$(date +%s)"
+          echo "release_body<<$delimiter" >> $GITHUB_OUTPUT
+          echo "$content" >> $GITHUB_OUTPUT
+          echo "$delimiter" >> $GITHUB_OUTPUT
+          
+          echo "✅ 发布变更日志已生成"
+      # ====================================
 
   release:
     if: (needs.meta.outputs.is_tag_push == 'true') || (github.event_name == 'workflow_dispatch' && needs.meta.outputs.is_dev_version == 'true')
     needs: [meta, install, changelog]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Get current timestamp
         id: get_time
@@ -158,17 +233,15 @@ jobs:
           cd artifacts
           mkdir -p release_assets
           for dir in *; do
-            # 提取平台信息
             platform=${dir#MFABD2-}
             zip_name="MFABD2-${{ needs.meta.outputs.tag }}-${platform}.zip"
-            
-            # 创建压缩包
             (cd "$dir" && zip -r "../release_assets/$zip_name" .)
           done
           
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}  # 使用1000次/小时的GitHub App令牌
           files: artifacts/release_assets/*.zip
           tag_name: ${{ needs.meta.outputs.tag }}
           name: "${{ needs.meta.outputs.tag }}"
