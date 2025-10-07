@@ -77,6 +77,15 @@ jobs:
           submodules: true
           fetch-depth: 0
 
+      # ========== 为Linux/macOS安装Rust ==========
+      - name: Setup Rust toolchain
+        if: matrix.os == 'linux' || matrix.os == 'macos'
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          components: rust-src
+
       - name: Download MaaFramework
         uses: robinraju/release-downloader@v1
         with:
@@ -107,30 +116,50 @@ jobs:
       # ========== 变更日志生成 ==========
       - name: Generate Changelog for App
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 使用1000次/小时的GitHub App令牌
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
-          # 安装git-cliff（使用系统包管理器更快速）
-          if command -v apt-get &> /dev/null; then
-            sudo apt-get update && sudo apt-get install -y git-cliff
+          # 确保安装 git-cliff（指定稳定版本）
+          if [[ "${{ matrix.os }}" == "win" ]]; then
+            # Windows平台使用预编译版本
+            curl -L https://github.com/orhun/git-cliff/releases/download/v1.4.1/git-cliff-1.4.1-x86_64-pc-windows-msvc.zip -o git-cliff.zip
+            unzip git-cliff.zip
+            chmod +x git-cliff.exe
+            ./git-cliff.exe --version
           else
-            cargo install git-cliff
+            # Linux/macOS使用cargo安装
+            cargo install git-cliff --version 1.4.1
           fi
           
           # 生成当前版本的变更日志
           if [ -n "${{ needs.meta.outputs.prev_tag }}" ]; then
             echo "生成变更日志从 ${{ needs.meta.outputs.prev_tag }} 到 HEAD"
-            git-cliff --config .github/cliff.toml \
-              --tag "${{ needs.meta.outputs.tag }}" \
-              --unreleased \
-              --include-path '*.py' '*.md' 'assets/*' \
-              --output resource/Changelog.md \
-              ${{ needs.meta.outputs.prev_tag }}..HEAD
+            if [[ "${{ matrix.os }}" == "win" ]]; then
+              ./git-cliff.exe --config .github/cliff.toml \
+                --tag "${{ needs.meta.outputs.tag }}" \
+                --unreleased \
+                --include-path '*.py' '*.md' 'assets/*' \
+                --output resource/Changelog.md \
+                ${{ needs.meta.outputs.prev_tag }}..HEAD
+            else
+              git-cliff --config .github/cliff.toml \
+                --tag "${{ needs.meta.outputs.tag }}" \
+                --unreleased \
+                --include-path '*.py' '*.md' 'assets/*' \
+                --output resource/Changelog.md \
+                ${{ needs.meta.outputs.prev_tag }}..HEAD
+            fi
           else
             echo "生成完整变更日志"
-            git-cliff --config .github/cliff.toml \
-              --tag "${{ needs.meta.outputs.tag }}" \
-              --output resource/Changelog.md
+            if [[ "${{ matrix.os }}" == "win" ]]; then
+              ./git-cliff.exe --config .github/cliff.toml \
+                --tag "${{ needs.meta.outputs.tag }}" \
+                --output resource/Changelog.md
+            else
+              git-cliff --config .github/cliff.toml \
+                --tag "${{ needs.meta.outputs.tag }}" \
+                --output resource/Changelog.md
+            fi
           fi
           
           echo "✅ 应用变更日志已生成"
@@ -173,21 +202,25 @@ jobs:
         with:
           fetch-depth: 0
 
+      # ========== 安装Rust ==========
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          components: rust-src, llvm-tools-preview
+
       # ========== 发布变更日志生成 ==========
       - name: Generate changelog for Release
         id: generate-changelog
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 使用1000次/小时的GitHub App令牌
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
-          # 安装git-cliff
-          if command -v apt-get &> /dev/null; then
-            sudo apt-get update && sudo apt-get install -y git-cliff
-          else
-            cargo install git-cliff
-          fi
+          # 确保安装 git-cliff（指定稳定版本）
+          cargo install git-cliff --version 1.4.1
           
-          # 生成当前版本的变更日志
+          # 生成变更日志
           if [ -n "${{ needs.meta.outputs.prev_tag }}" ]; then
             git-cliff --config .github/cliff.toml \
               --tag "${{ needs.meta.outputs.tag }}" \
@@ -201,14 +234,9 @@ jobs:
               --output temp_changelog.md
           fi
           
-          # 读取文件内容
-          content=$(cat temp_changelog.md)
-          
-          # 设置输出（使用GitHub内置的多行输出支持）
-          delimiter="EOF_$(date +%s)"
-          echo "release_body<<$delimiter" >> $GITHUB_OUTPUT
-          echo "$content" >> $GITHUB_OUTPUT
-          echo "$delimiter" >> $GITHUB_OUTPUT
+          # 读取文件内容（使用GitHub Actions安全输出）
+          content="$(<temp_changelog.md)"
+          echo "release_body=$content" >> $GITHUB_OUTPUT
           
           echo "✅ 发布变更日志已生成"
       # ====================================
@@ -241,7 +269,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}  # 使用1000次/小时的GitHub App令牌
+          token: ${{ secrets.GITHUB_TOKEN }}
           files: artifacts/release_assets/*.zip
           tag_name: ${{ needs.meta.outputs.tag }}
           name: "${{ needs.meta.outputs.tag }}"
