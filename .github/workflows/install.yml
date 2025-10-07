@@ -83,7 +83,6 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
-          profile: minimal
           components: rust-src
 
       - name: Download MaaFramework
@@ -207,7 +206,6 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
-          profile: minimal
           components: rust-src, llvm-tools-preview
 
       # ========== 发布变更日志生成 ==========
