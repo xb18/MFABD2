@@ -107,7 +107,8 @@
 			"check": true,
 			"entry": "GetReward_HomePage",
 			"option": [
-				"公会奖励"
+				"公会奖励",
+				"餐馆升级"
 			],
 			"doc": "**日常奖励：**依次领取`公会每日签到`、`餐馆-格鲁费之星`，进入`餐馆`领取每日`常客圣石`，切出卡带到`主线2`，领取`每日/周任务奖励`。\n\n**无公会请关闭公会奖励开关。**"
 		},
@@ -968,6 +969,27 @@
 							]
 						}
 					}
+				}
+			]
+		},
+		"餐馆升级": {
+			"doc": "自动升级餐馆的阶段和等级。\n\n默认关闭。建议考虑到游戏体验按需开启。",
+			"cases": [
+				{
+					"name": "No",
+					"pipeline_override": {
+						"GetReward_Busin_GiftGet": {
+							"next": [
+								"GetReward_Busin_GiftGet",
+								"GetReward_Busin_Quick_BackPVEPage_Str",
+								"GetReward_Busin_BackPVEPage"
+							]
+						}
+					}
+				},
+				{
+					"name": "Yes",
+					"pipeline_override": {}
 				}
 			]
 		},

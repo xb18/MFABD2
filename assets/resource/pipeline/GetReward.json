@@ -255,14 +255,15 @@
     "post_delay": 1000,
     "focus": "GM.餐馆结算(IMG)-主界面",
     "roi": [
-      85,
-      228,
-      98,
-      34
+      65,
+      81,
+      326,
+      264
     ],
     "template": [
       "MainBotmBusinGE.png"
     ],
+    "green_mask": true,
     "doc": "识别点击餐馆图像"
   },
   "GetReward_GetBusinReward": {
@@ -404,6 +405,8 @@
     "action": "Click",
     "next": [
       "GetReward_Busin_GiftGet",
+      "Collect_Busin_up",
+      "Collect_Busin_level",
       "GetReward_Busin_Quick_BackPVEPage_Str",
       "GetReward_Busin_BackPVEPage"
     ],
@@ -430,6 +433,8 @@
   "GetReward_Busin_NoGift": {
     "recognition": "OCR",
     "next": [
+      "Collect_Busin_up",
+      "Collect_Busin_level",
       "GetReward_Busin_Quick_BackPVEPage_Str",
       "GetReward_Busin_BackPVEPage"
     ],
@@ -442,6 +447,57 @@
     ],
     "expected": [
       "常客"
+    ]
+  },
+  "Collect_Busin_up": {
+    "doc": "餐厅下一阶段",
+    "recognition": "OCR",
+    "roi": [
+      790,
+      612,
+      74,
+      42
+    ],
+    "expected": "阶段",
+    "focus": "餐厅等级内进入下一阶段",
+    "action": "Click",
+    "post_delay": 800,
+    "next": [
+      "GetReward_Busin_NoGift"
+    ]
+  },
+  "Collect_Busin_level": {
+    "doc": "升级",
+    "recognition": "OCR",
+    "roi": [
+      759,
+      618,
+      132,
+      70
+    ],
+    "expected": "升级",
+    "action": "Click",
+    "post_delay": 1500,
+    "next": [
+      "Collect_Busin_Pre_Guest",
+      "Collect_Busin_level"
+    ]
+  },
+  "Collect_Busin_Pre_Guest": {
+    "doc": "升级完成",
+    "recognition": "OCR",
+    "roi": [
+      581,
+      568,
+      117,
+      29
+    ],
+    "expected": "点击画面关闭",
+    "action": "Click",
+    "post_delay": 1000,
+    "next": [
+      "GetReward_Busin_NoGift",
+      "Collect_Busin_level"
     ]
   },
   "GetReward_Busin_Back": {
